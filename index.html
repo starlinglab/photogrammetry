@@ -1,0 +1,447 @@
+<html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Freeman Alley: Scroll Controls</title>
+      <link rel="stylesheet" href="c2pa.css">
+      <script async src="https://unpkg.com/es-module-shims@0.11.1/dist/es-module-shims.js"></script>
+      <script type="importmap-shim">
+        {
+          "imports": {
+            "three": "https://cdn.skypack.dev/three@0.129.0",
+            "three/examples/jsm/loaders/GLTFLoader": "https://cdn.skypack.dev/three@0.129.0/examples/jsm/loaders/GLTFLoader",
+            "three/examples/jsm/loaders/DRACOLoader": "https://cdn.skypack.dev/three@0.129.0/examples/jsm/loaders/DRACOLoader",
+            "gsap": "https://cdn.skypack.dev/gsap@3.6.1",
+            "three-story-controls" : "https://unpkg.com/three-story-controls@1.0.0/dist/three-story-controls.esm.min.js"
+          }
+        }
+      </script>
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+        }
+    
+        body {
+          width: 100vw;
+          position: relative;
+          font-weight: 100;
+          font-family: Helvetica, Arial, Helvetica, sans-serif;
+          background-color: black;
+          color: white;
+          overflow-x: hidden;
+        }
+    
+        .content {
+          width: 100%;
+          max-width: 640px;
+          margin: 4rem auto 6rem auto;
+          box-sizing: border-box;
+          padding: 0 2rem;
+        }
+    
+        .content p {
+          font-size: 1.2rem;
+          line-height: 1.4;
+          margin-bottom: 2rem;
+        }
+    
+        h1 {
+          font-size: 3rem;
+          margin-bottom: 3rem;
+          margin-top: 2rem;
+          line-height: 1.2;
+        }
+    
+        .back {
+          color: inherit;
+          text-decoration: none;
+          margin: 2rem;
+          display: block;
+        }
+    
+        .scene {
+          position: relative;
+        }
+    
+        .canvas-parent {
+          width: 100vw;
+          height: 100vh;
+          touch-action: none;
+          position: sticky;
+          top: 0;
+          z-index: -1;
+        }
+    
+        .loading {
+          text-align: center;
+          color: rgba(255,255,255,0.6);
+          top: 40%;
+          position: relative;
+        }
+    
+        canvas {
+          opacity: 0;
+        }
+    
+        .scroller {
+          top: 0vh;
+          width: 100vw;
+          height: 800vh;
+          z-index: 2;
+        }
+    
+        .caption {
+          background-color: rgba(0,0,0,0.75);
+          padding: 1.6rem 2rem 1.8rem 2rem;
+          width: 340px;
+          position: absolute;
+        }
+    
+        .caption p {
+          color: white;
+          font-size: 1.2rem;
+          line-height: 1.4;
+        }
+    
+        #c1 {
+          top: 150vh;
+          left: 15vw;
+        }
+        #c2 {
+          top: 300vh;
+          right: 20vw;
+        }
+        #c3 {
+          top: 450vh;
+          left: 20vw;
+        }
+        #c4 {
+          top: 600vh;
+          right: 10vw;
+        }
+    
+        @media (max-width: 1024px) {
+          #c1, #c2, #c3, #c4 {
+            right: auto;
+            left: 5rem;
+          }
+        }
+    
+        @media (max-width: 420px) {
+          h1 {
+            font-size: 2.5rem;
+          }
+        }
+    
+      </style>
+    </head>
+    
+    <body>
+      <script type="module">
+        import { ContentAuth } from 'https://cdn.jsdelivr.net/npm/@contentauth/sdk@0.8.12-alpha.10/dist/cai-sdk.esm.min.js';
+        import 'https://cdn.jsdelivr.net/npm/@contentauth/web-components@0.4.2-alpha.20/dist/index.min.js';
+
+        const wasmSrc = "https://cdn.jsdelivr.net/npm/@contentauth/sdk@0.8.12-alpha.10/dist/assets/wasm/toolkit_bg.wasm";
+        const workerSrc = "https://cdn.jsdelivr.net/npm/@contentauth/sdk@0.8.12-alpha.10/dist/cai-sdk.worker.min.js";
+        const sdk = new ContentAuth({ wasmSrc, workerSrc });
+
+        function findMapEntry(map, entry) {
+            for (const [key, value] of map.entries(map)) {
+                if (key.length >= entry.length) {
+                    if (key.substring(key.length - entry.length) == entry) {
+                        return key;
+                    }
+                }
+            }
+            return;
+        }
+ 
+        async function LoadClaim(ID) {
+            var claimObject = document.getElementById(ID);
+            var srcImg = claimObject.getElementsByTagName("img")[0].src;
+            
+            const sdk = new ContentAuth({
+                wasmSrc,
+                workerSrc,
+            });
+            const provenance = await sdk.processImage(srcImg);
+
+            var item = claimObject.querySelector(".claim");
+            var entity = claimObject;
+
+            var claimProperties = {
+                "resolution_unit": "",
+                "x_resolution":"",
+                "y_resolution":"",
+                "exposure_time":"",
+                "focal_length": "",
+                "gps_altitude": "",
+                "gps_longitude":"",
+                "gps_latitude":"",
+                "gps_times_stamp":"",
+                "make": "",
+                "model": "",
+            }
+
+            provenance.activeClaim.asSerializableData().then((result) => {
+                var panel = document.getElementsByTagName("cai-discrete-panel")[0];
+                item.setAttribute("claim", JSON.stringify(result.data));
+                item.setAttribute("viewMoreUrl", ContentAuth.generateVerifyUrl(srcImg));
+
+                var e = entity.innerHTML;
+                var claim = provenance.activeClaim;
+                var claimSocialHash = {};
+
+                console.log(provenance);
+
+                // Loop through all claims
+                for (const [key, value] of provenance.claims.entries()) {
+                    var claim = value;  
+                    var c2paActions = findMapEntry(claim.assertions, `c2pa.actions`);
+                    if (c2paActions) {
+                        for (var i = 0; i < claim.assertions.get(c2paActions).assertion.data['actions'].length; i++) {
+                            switch (claim.assertions.get(c2paActions).assertion.data['actions'][i]['action']) {
+                                case "c2pa.created":
+                                    //dateCreated=claim.assertions.get(c2paActions).assertion.data['actions'][i]['when'];
+                                    claimProperties["capturedWith"] = claim.recorder;
+                                    break;
+                                default:
+                            }
+                        }
+                    } 
+                    var ImageKey = findMapEntry(claim.assertions, `stds.exif`);
+                    if (ImageKey) {
+                        claimProperties["resolution_unit"] = claim.assertions.get(ImageKey).assertion.data['exif:FocalPlaneResolutionUnit'];
+                        claimProperties["x_resolution"] = claim.assertions.get(ImageKey).assertion.data['exif:FocalPlaneXResolution'];
+                        claimProperties["y_resolution"] = claim.assertions.get(ImageKey).assertion.data['exif:FocalPlaneYResolution'];
+                        claimProperties["exposure_time"] = claim.assertions.get(ImageKey).assertion.data['exif:ExposureTime'];
+                        claimProperties["focal_length"] = claim.assertions.get(ImageKey).assertion.data['exif:FocalLength'];
+                    }
+                    var GPSKey = findMapEntry(claim.assertions, `stds.exif`);
+                    if (GPSKey) {
+                        claimProperties["gps_altitude"] = claim.assertions.get(GPSKey).assertion.data['exif:GPSAltitude'];
+                        claimProperties["gps_longitude"] = claim.assertions.get(GPSKey).assertion.data['exif:GPSLongitude'];
+                        claimProperties["gps_latitude"] = claim.assertions.get(GPSKey).assertion.data['exif:GPSLatitude'];
+                        claimProperties["gps_times_stamp"] = claim.assertions.get(GPSKey).assertion.data['exif:GPSTimeStamp'];
+                    }
+                }
+                claim = provenance.activeClaim;
+
+                for( var k in claimProperties) {
+                    e = e.replaceAll("{claim." + k + "}", claimProperties[k]);
+                }
+                entity.innerHTML = e;
+            });
+        };
+        LoadClaim("test1");
+        LoadClaim("test2");
+        LoadClaim("test3");
+        LoadClaim("test4");
+        LoadClaim("test5");
+      </script> 
+
+      <div class='content'>
+        <h1> Photogrammetric Authentication </h1>
+        <p><i> By Adriana Kornfein, Na Young Son, and Justin Wei </i></p>
+
+        <h2> Introduction</h2>
+        <p>
+          Mis and Disinformation are rapidly spreading in the media, polarizing the public. 
+          Cryptographic signatures and blockchain technology are creative solutions to tracking 
+          and presenting digital media provenance. Digital history, or provenance, tracks important 
+          information about the capture, editing, and sharing of an image. Provenance provides 
+          users more context on the media they are consuming. Some key questions we hoped to 
+          answer over the summer were… 
+        </p>
+
+        <b> 
+          <p>How do we design for authenticity?</p>
+          <p>How do we build public trust in the media with technology? </p>
+          <p>How do we expand provenance to Photogrammetric 3D Models? </p> 
+        </b>
+        
+        <h2>Photogrammetry</h2>
+
+         <p>Photogrammetry is a method to align images into a 3D model. This method is starting to 
+          become more popular among journalists because it allows for quick capture and reconstruction 
+          of scenes for digital media content. Over the summer our group wished to research utilizing 
+          Starling Labs framework for authenticity and apply it to photogrammetry in order to expand the
+           ways provenance can be incorporated into different media types.This project uses the Open 
+           Source platform Meshroom to create the photogrammetric model. In order to complete it, we took 
+           about 100 photos of the art wall at different angles and levels within the same timespan and 
+           geographic location using the exodus phones. 
+          </p> 
+
+          <image src="out-photos/explainer.png" width="1000" height="400"/>
+          <p></p>
+          <h2> Authentication and Schema </h2>
+          <p>
+            It turns out that it is extremely difficult to implement existing methods of image verification 
+            to verify models, which are typically stored as obj files. As such, the best method to verify the 
+            models is to verify the photos themselves and to present these verified photos alongside the model 
+            on the internet. To do so, we had to design a new schema to verify individual photos. 
+          </p>
+          <p>
+            During the design process, we discovered that the existing Starling schema used in ProofMode 
+            verification already contains most of what we envision in photogrammetric verification because the 
+            photogrammetric models that we verify will be used in the same context as photos. The most important 
+            change, however, is that Starling’s schema does not contain sufficient EXIF data, which is important 
+            because the generation of photogrammetric models relies heavily on certain fields of EXIF data. As 
+            such, the one addition that we made to the existing schema is to include more EXIF data. The old schema 
+            already included the following fields: 
+
+          </p>
+        <p> <i> GPS latitude, GPS latitude reference, GPS longitude, GPS longitude reference
+        </i></p>
+
+        <p>
+          We added the following EXIF fields to our new schema: 
+        </p>
+        <p><i> Exposure time, Focal length, Resolution unit, Resolution ihe x-axis (pixels per unit length),Resolution ihe y-axis 
+          (pixels per unit length), GPS altitude, Lens manufacturer, Lens model</i>
+        </p>
+      </div>
+    
+      <div class='scene'>
+        <div class='canvas-parent'>
+          <p class='loading'> Loading ... </p>
+        </div>
+
+        <div class='scroller'>
+
+          <div class='caption' id='c1'>
+            <div id="test1" class="caiwrapper" style="width:300px">
+              <img src="out-photos/2dude_with_second_manifest.jpg">
+              <cai-popover id="test1" interactive placement="left" arrowSize="13">
+                <cai-indicator slot="trigger"></cai-indicator>
+                  <cai-discrete-panel slot="content" claim="" class="claim theme-spectrum">
+                    <div slot="sections" className="sections">
+                      <cai-panel-section header="Image Information" class="theme-spectrum">
+                        resolution unit: {claim.resolution_unit} <br>
+                        x-resolution: {claim.x_resolution} <br>
+                        y-resolution: {claim.y_resolution} <br>
+                        exposure time: {claim.exposure_time} <br>
+                        focal length: {claim.focal_length} <br>
+                      </cai-panel-section>
+                      <cai-panel-section header="GPS Information" class="theme-spectrum">
+                        altitude: {claim.gps_altitude} <br>
+                        longitude: {claim.gps_longitude} <br>
+                        latitude: {claim.gps_latitude} <br>
+                        time stamp: {claim.gps_times_stamp} <br>
+                      </cai-panel-section>
+                    </div>
+                  </cai-discrete-panel>
+              </cai-popover>
+            </div>
+          </div>
+
+          <div class='caption' id='c2'>
+            <div id="test2" class="caiwrapper" style="width:300px">
+              <img src="out-photos/3dog_with_second_manifest.jpg">
+              <cai-popover id="test2" interactive placement="left" arrowSize="13">
+                <cai-indicator slot="trigger"></cai-indicator>
+                  <cai-discrete-panel slot="content" claim="" class="claim theme-spectrum">
+                    <div slot="sections" className="sections">
+                      <cai-panel-section header="Image Information" class="theme-spectrum">
+                        resolution unit: {claim.resolution_unit} <br>
+                        x-resolution: {claim.x_resolution} <br>
+                        y-resolution: {claim.y_resolution} <br>
+                        exposure time: {claim.exposure_time} <br>
+                        focal length: {claim.focal_length} <br>
+                      </cai-panel-section>
+                      <cai-panel-section header="GPS Information" class="theme-spectrum">
+                        altitude: {claim.gps_altitude} <br>
+                        longitude: {claim.gps_longitude} <br>
+                        latitude: {claim.gps_latitude} <br>
+                        time stamp: {claim.gps_times_stamp} <br>
+                      </cai-panel-section>
+                    </div>
+                  </cai-discrete-panel>
+              </cai-popover>
+            </div>
+          </div>
+
+          <div class='caption' id='c3'>
+            <div id="test3" class="caiwrapper" style="width:300px">
+              <img src="out-photos/4bird_with_second_manifest.jpg">
+              <cai-popover id="test9" interactive placement="left" arrowSize="13">
+                  <cai-indicator slot="trigger"></cai-indicator>
+                  <cai-discrete-panel slot="content" claim="" class="claim theme-spectrum">
+                      <div slot="sections" className="sections">
+                          <cai-panel-section header="Image Information" class="theme-spectrum">
+                              resolution unit: {claim.resolution_unit} <br>
+                              x-resolution: {claim.x_resolution} <br>
+                              y-resolution: {claim.y_resolution} <br>
+                              exposure time: {claim.exposure_time} <br>
+                              focal length: {claim.focal_length} <br>
+                          </cai-panel-section>
+                          <cai-panel-section header="GPS Information" class="theme-spectrum">
+                              altitude: {claim.gps_altitude} <br>
+                              longitude: {claim.gps_longitude} <br>
+                              latitude: {claim.gps_latitude} <br>
+                              time stamp: {claim.gps_times_stamp} <br>
+                          </cai-panel-section>
+                      </div>
+                  </cai-discrete-panel>
+              </cai-popover>
+            </div>
+          </div>
+
+          <div class='caption' id='c4'> 
+            <div id="test5" class="caiwrapper" style="width:300px">
+              <img src="out-photos/5chickens.jpg">
+              <cai-popover id="test9" interactive placement="left" arrowSize="13">
+                  <cai-indicator slot="trigger"></cai-indicator>
+                  <cai-discrete-panel slot="content" claim="" class="claim theme-spectrum">
+                      <div slot="sections" className="sections">
+                          <cai-panel-section header="Image Information" class="theme-spectrum">
+                              resolution unit: {claim.resolution_unit} <br>
+                              x-resolution: {claim.x_resolution} <br>
+                              y-resolution: {claim.y_resolution} <br>
+                              exposure time: {claim.exposure_time} <br>
+                              focal length: {claim.focal_length} <br>
+                          </cai-panel-section>
+                          <cai-panel-section header="GPS Information" class="theme-spectrum">
+                              altitude: {claim.gps_altitude} <br>
+                              longitude: {claim.gps_longitude} <br>
+                              latitude: {claim.gps_latitude} <br>
+                              time stamp: {claim.gps_times_stamp} <br>
+                          </cai-panel-section>
+                      </div>
+                  </cai-discrete-panel>
+              </cai-popover>
+            </div>
+          </div>
+
+
+       
+      </div>
+    
+      <div class='content'>
+        
+        <h2> UI Design </h2> 
+          <p>We were inspired by the Content Authenticity Initiative projects user interface that allows the user to compare the original 
+          photo to the edited one. We thought that framing the original photo against the realistic 3D model would allow the users to 
+          interact with both, and see where the original scan was created from. They could additionally then decide whether the 3D model 
+          was an accurate representation of the real life place/object. 
+          </p>
+          <p>
+            We found that the NYT had an open source library that worked on different publishing techniques for photogrammetric models.
+            This allowed for a way for the website user to interact with the model side by side with the Verified photos and create this 
+            sense of comparison.
+          </p>
+       
+          <h2> Conclusion</h2>
+          <p>
+            We developed a workflow that journalists could use to verify their photogrammetric models. One step we can take in the future 
+            direction is to be able to automate the entire process since the workflow as it exists right now depends on someone taking the photos
+            and running through a program. After that, our next step is to explore how we can directly attach the c2pa schema and verification 
+            signature on the OBJ file of a 3D model. 
+          </p>
+
+          <p><i> Stanford Electrical Engineering Summer Research 2022 for Starling Lab</i></p>
+      </div>
+      <script type='module-shim' src='script.js'></script>
+    </body>
+</html>
